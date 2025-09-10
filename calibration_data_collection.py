@@ -70,10 +70,10 @@ bot.wait(C)
 del bot
 
 with open('calibration_data.csv', 'x') as f:
-    f.write("cam_x, cam_y, cam_z, gt_x, gt_y, gt_z\n")
+    f.write("cam_x,cam_y,cam_z,gt_x,gt_y,gt_z\n")
     for q, measurement in measurements:
         C.setJointState(q)
         gripper_transform = np.linalg.inv(C.getFrame('l_gripper').getTransform())
         for id, z_cam in measurement.items():
             z_true = gripper_transform @ np.concatenate((ground_truth[id], [1]))
-            f.write(f"{z_cam[0]}, {z_cam[1]}, {z_cam[2]}, {z_true[0]}, {z_true[1]}, {z_true[2]}\n")
+            f.write(f"{z_cam[0]},{z_cam[1]},{z_cam[2]},{z_true[0]},{z_true[1]},{z_true[2]}\n")
