@@ -35,7 +35,6 @@ def main():
 
     rgb, _, points = bot.getImageDepthPcl("l_cameraWrist", globalCoordinates=True)
 
-
     v_coords = np.linspace(0,1, points.shape[0])
     u_coords = np.linspace(0,1, points.shape[1])
     u, v = np.meshgrid(u_coords, v_coords)
@@ -43,9 +42,11 @@ def main():
     X = uv.reshape(-1, 3)
     Y = points.reshape(-1, 3)
 
+    P = Y.T @ X @ np.linalg.inv(X.T @ X)
 
-
-    P = Y.T @ X @np.linalg.inv(X.T @ X)
+    pcl = C.addFrame("pcl", "l_cameraWrist")
+    pcl.setPointCloud(points, rgb)
+    C.view(True)
     del bot
     del C
 
