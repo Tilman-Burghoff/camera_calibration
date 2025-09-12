@@ -24,7 +24,7 @@ def load_data(filename):
 
     for entry in data:
         C.setJointState(entry['joint_state'])
-        c, _ = C.eval(ry.FS.positionRel, ['world', 'l_gripper'])
+        c, _ = C.eval(ry.FS.positionRel, ['origin', 'l_gripper'])
         n, _ = C.eval(ry.FS.vectorZRel, ['world','l_gripper']) # the table normal is the global z vector
 
         points = np.array(entry['pointcloud'])
@@ -52,8 +52,7 @@ if __name__ == '__main__':
     R = T_inv[:3, :3]
     q = Rotation.from_matrix(R).as_quat()
     Q = np.round(t, 8).tolist() + np.round(q, 8).tolist()
-    print(Q) # returns [0.29422605, -0.04449869, -0.36928706, 0.0027748, 0.99729706, -0.00370467, 0.07332902]
-    # This is way off and idk why yet
+    print(Q) # returns [0.02007601, 0.05057013, 0.03766085, 0.00368336, 0.99988913, -0.00662298, 0.01281754]
 
     C.setJointState(qHome)
     cam = C.addFrame('computed_cam', 'l_gripper').setShape(ry.ST.marker, [.1])
