@@ -1,7 +1,9 @@
 # we parse our data into the form (n_i, c_i, x_i), where n_i is the normal of the table and c_i its center expressed in the gripper frame, while
 # x_i is a point of the pointcloud in the the camera frame in homogeneous coordinates. We try to find the projection P from camera to gripper
-# such that all points lie on the table, ie n_i^T * (P * x_i - c_i) = 0 for all i. We will try to solve this by linearization and by pseudo-inverse
-# (see respective functions below). The resulting P is a 3x4 matrix that combines a rotation R and translation t in the form P = [R | t],
+# such that all points lie on the table, ie n_i^T * (P * x_i - c_i) = 0 for all i. We will try to solve this by linearization either of the 
+# problem itself or of the by rewriting the derivate as a linear problem (see respective functions below). Both yield similar but incorrect results.
+# The error is therefore likely in my problem-formulation, in the data or due to some degeneracy.
+# The resulting P is a 3x4 matrix that combines a rotation R and translation t in the form P = [R | t],
 # from which we first recover R and t and then our transformation Q = [t, q] where q is the quaternion describing R.
 
 import json
@@ -10,7 +12,7 @@ import robotic as ry
 from scipy.spatial.transform import Rotation
 
 
-SOLVER = 'lin' # 'lin' for linearization, 'pinv' for pseudo-inverse
+SOLVER = 'lin_d' # 'lin' for linearization, 'lin_d' for linearization by derivative
 
 
 def load_data(C, filename):
@@ -54,13 +56,7 @@ def solve_by_linerization(n, c, x):
     return P.reshape(3,4)
 
 
-def solve_by_pinv(n, c, x):
-    # We use N P X^T = N C.T => P = N^+ N C (X^T)^+ where N, X, C are the matrices with rows n_i, x_i, c_i
-    P = np.linalg.pinv(n) @ n @ c.T @ np.linalg.pinv(x.T)
-    return P
-
-
-def solve_by_closed_form(n, c, x):
+def solve_by_lin_derivative(n, c, x):
     # we attempt to find a closed form solution by deriving ||n_i^T * (P * x_i - c_i)||^2 wrt P.
     # This leads to the equation sum_i (n_i^T P x_i) (n_i x_i^T) = sum_i (n_i^T c_i) n_i x_i^T = A
     # Let S = [vec(n_i x_i^T)]_i be the matrix with rows vec(n_i x_i^T) and solve for s in S s = vec(A)
@@ -68,10 +64,8 @@ def solve_by_closed_form(n, c, x):
     A = np.einsum('ij, ij, ik, il->kl', n, c, n, x)
     S = np.einsum('ij, ik->ijk', n, x).reshape(-1, 12)
     s,_,_,_ = np.linalg.lstsq(S.T, A.ravel(), rcond=None)
-    print(S.shape, A.shape, s.shape)
     P,_,_,_ = np.linalg.lstsq(S, s, rcond=None)
     return P.reshape(3,4)
-
 
 
 def get_Q(P):
@@ -98,13 +92,12 @@ def main():
     C.addFile(ry.raiPath("scenarios/pandaSingle_camera.g"))
     
     n, c, x, pcls, qs = load_data(C, 'camera_calibration_data.json')
-    #if SOLVER == 'lin':
-    #    P = solve_by_linerization(n, c, x)
-    #elif SOLVER == 'pinv':
-    #    P = solve_by_pinv(n, c, x)
-    #else:
-    #    raise ValueError("Invalid SOLVER option")
-    P = solve_by_closed_form(n, c, x)
+    if SOLVER == 'lin':
+        P = solve_by_linerization(n, c, x)
+    elif SOLVER == 'lin_d':
+        P = solve_by_lin_derivative(n, c, x)
+    else:
+        raise ValueError("Invalid SOLVER option")
     # both methods produce different, incorrect results
 
     Q = get_Q(P)
