@@ -13,7 +13,7 @@ from scipy.spatial.transform import Rotation
 SOLVER = 'lin' # 'lin' for linearization, 'pinv' for pseudo-inverse
 
 
-def load_data(filename):
+def load_data(C, filename):
     with open(filename, "r") as f:
         data = json.load(f)
 
@@ -60,6 +60,20 @@ def solve_by_pinv(n, c, x):
     return P
 
 
+def solve_by_closed_form(n, c, x):
+    # we attempt to find a closed form solution by deriving ||n_i^T * (P * x_i - c_i)||^2 wrt P.
+    # This leads to the equation sum_i (n_i^T P x_i) (n_i x_i^T) = sum_i (n_i^T c_i) n_i x_i^T = A
+    # Let S = [vec(n_i x_i^T)]_i be the matrix with rows vec(n_i x_i^T) and solve for s in S s = vec(A)
+    # Now we recover P by S vec(P) = s. This leads to the closed form vec(P) = S(S^T S)^-1 S^-1 vec(A)
+    A = np.einsum('ij, ij, ik, il->kl', n, c, n, x)
+    S = np.einsum('ij, ik->ijk', n, x).reshape(-1, 12)
+    s,_,_,_ = np.linalg.lstsq(S.T, A.ravel(), rcond=None)
+    print(S.shape, A.shape, s.shape)
+    P,_,_,_ = np.linalg.lstsq(S, s, rcond=None)
+    return P.reshape(3,4)
+
+
+
 def get_Q(P):
     R = P[:3, :3].T
     t = -R @ P[:3, 3]
@@ -72,7 +86,7 @@ def visualize_Q(C, Q, pcls, qs):
     cam = C.addFrame('computed_cam', 'l_gripper').setShape(ry.ST.marker, [.1])
     cam.setRelativePose(Q)
 
-    pcl_f = C.addFrame('pcl', 'l_cameraWrist')
+    pcl_f = C.addFrame('pcl', 'computed_cam')
     for i, (pcl, q) in enumerate(zip(pcls, qs)):
         pcl_f.setPointCloud(pcl)
         C.setJointState(q)
@@ -84,12 +98,13 @@ def main():
     C.addFile(ry.raiPath("scenarios/pandaSingle_camera.g"))
     
     n, c, x, pcls, qs = load_data(C, 'camera_calibration_data.json')
-    if SOLVER == 'lin':
-        P = solve_by_linerization(n, c, x)
-    elif SOLVER == 'pinv':
-        P = solve_by_pinv(n, c, x)
-    else:
-        raise ValueError("Invalid SOLVER option")
+    #if SOLVER == 'lin':
+    #    P = solve_by_linerization(n, c, x)
+    #elif SOLVER == 'pinv':
+    #    P = solve_by_pinv(n, c, x)
+    #else:
+    #    raise ValueError("Invalid SOLVER option")
+    P = solve_by_closed_form(n, c, x)
     # both methods produce different, incorrect results
 
     Q = get_Q(P)
