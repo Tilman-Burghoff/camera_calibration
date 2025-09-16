@@ -1,16 +1,17 @@
 from cv2 import aruco
 import robotic as ry
 import numpy as np
+from robotic.src.h5_helper import H5Writer, H5Reader
 import json
 
 # TODO: Ground truth
 
 aruco_6x6 = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
-aruco_params = aruco.DetectorParameters()
+aruco_params = aruco.DetectorParameters_create()
 aruco_params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
 
 
-NUMBER_OF_POSES = 20
+NUMBER_OF_POSES = 2
 MIN_DISTANCE = 0.2
 MAX_DISTANCE = 0.8
 
@@ -20,8 +21,17 @@ bot = ry.BotOp(C, True)
 pcl = C.addFrame("pcl", "l_cameraWrist")
 bot.getImageAndDepth('l_cameraWrist') # initialize camera
 
-data = []
+h5 = H5Writer('aruco_calibration_data.h5')
 
+manifest = {
+    'description': 'for various poses: joint state of the panda and ids and centers of arUco markers in pixel coordinates',
+    'n_datasets': NUMBER_OF_POSES
+}
+h5.write('manifest', bytearray(json.dumps(manifest), 'utf-8'), dtype='int8')
+
+
+data = []
+i = 0
 while i < NUMBER_OF_POSES:
     bot.hold(floating=True, damping=False)
     while bot.getKeyPressed() != ord('q'):
@@ -40,28 +50,26 @@ while i < NUMBER_OF_POSES:
     if ids is None:
         print("No markers detected, please try again")
         continue
-
-    markers = []
-    for corner, id in zip(corners, ids.flatten()):
-        corners = corner.squeeze()
-        center = np.mean(corners, axis=0)
-        markers.append({
-            'id': id, 
-            'corners': corner.squeeze().tolist(), 
-            'center': center.tolist()
-        })
-
-    data.append({
-        'id': i,
-        'gripper_pose': C.getFrame("l_gripper").getPose().tolist(), 
-        'joint_state':C.getJointState().tolist(),
-        'markers': markers
-    })
+    
+    joint_state = C.getJointState()
+    centers = [np.mean(np.array(corners[i].squeeze()), axis=0) for i in range(len(corners))]
+    key = f'dataset_{i}'
+    h5.write(key+'/joint_state', joint_state, dtype='float64')
+    h5.write(key+'/centers', centers, dtype='float32')
+    h5.write(key+'/ids', ids, dtype='int32')
     i += 1
 
 
 del bot
 del C
 
-with open("aruco_calibration_data.json", "w") as f:
-    json.dump(data, f, indent=2)
+h5 = H5Reader('aruco_calibration_data.h5')
+for i in range(NUMBER_OF_POSES):
+    key = f'dataset_{i}'
+    joint_state = h5.read(key+'/joint_state')
+    centers = h5.read(key+'/centers')
+    ids = h5.read(key+'/ids')
+    print(f"Dataset {i}:")
+    print(" Joint state:", joint_state)
+    print(" Marker ids:", ids.flatten())
+    print(" Marker centers (px):", np.round(centers,1))
