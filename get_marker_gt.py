@@ -3,12 +3,7 @@ import numpy as np
 from robotic.src import h5_helper
 import json
 
-# TODO align optitrack and real coordinates
-# optitrack origin should be at (1.15, .62, .6) in world frame
-# also 90 degrees rotated around z axis
-# add code to measure aruco pos
-
-MARKER_IDS = [4, 6, 14]
+MARKER_IDS = [4, 6, 14] # ids of the markers to record
 
 ry.params_add({
     'bot/useOptitrack': True,
@@ -17,39 +12,46 @@ ry.params_add({
 })
 
 C = ry.Config()
-C.addFile(ry.raiPath("scenarios/pandaSingle_camera.g"))
 
 bot = ry.BotOp(C, True)
 bot.sync(C)
 
-print(C.getFrameNames())
-optitrack_origin = C.getFrame('origin_optitrack')
-C.getFrame('world').setParent(optitrack_origin).setRelativePosition([0,0,0]).setRelativePoseByText('t(-1.15 -.62 -.6)')
+template = C.getFrame('template')
 
-marker = C.getFrame('aruco_marker')
-marker_pos = C.addFrame('marker_pos').setShape(ry.ST.marker, [.5])
-C.addFrame('origin_pos', 'origin_optitrack').setShape(ry.ST.marker, [.5])
+while bot.getKeyPressed() != ord('q'):
+    bot.sync(C, viewMsg=f'Move template to table origin, then press q')
+bot.sync(C)
 
-world_transform = C.getFrame('world').getTransform()
-global_coords = lambda z: np.array([z[1], -z[0], z[2]])
+origin = template.getPosition()
+C.addFrame('origin').setPosition(origin).setShape(ry.ST.marker, [.05])
+C.addFrame('table', 'origin').setRelativePosition([0,0,-.05]).setShape(ry.ST.box, [2.3, 1.24, .11]).setColor([100,100,100,100])
+template_marker = C.addFrame('template_marker', 'origin').setShape(ry.ST.marker, [.5])
 
 results = {}
+
+def opti_to_world(z):
+    z = z - origin
+    z[2] += .6
+    return np.array([-z[1], z[0], z[2]])
 
 for id in MARKER_IDS:
     bot.sync(C)
     while bot.getKeyPressed() != ord('q'):
-        coords = global_coords(marker.getPosition())
-        marker_pos.setPosition(coords)
+        z = opti_to_world(template.getPosition()) + np.array([0,0,-.6])
+        template_marker.setRelativePosition(z)
         bot.sync(C, viewMsg=f'Move template to marker {id}')
+    coords = opti_to_world(C.getFrame('template').getPosition())
     results[id] = coords
+    print(f'marker {id} position: {np.round(coords, 3)}')
+
 
 h5 = h5_helper.H5Writer('marker_gt.h5')
 for id, pos in results.items():
-    h5.write(f'marker_{id}', pos, dtype='float32')
+    h5.write(f'marker_{id}/position', pos, dtype='float32')
 
 manifest = {
     'description': 'ground truth positions of aruco markers in world frame',
-    'n_markers': len(MARKER_IDS),
-    'marker_ids': MARKER_IDS
+    'n_datasets': len(MARKER_IDS),
+    'marker_ids': MARKER_IDS,
 }
 h5.write('manifest', bytearray(json.dumps(manifest), 'utf-8'), dtype='int8')
