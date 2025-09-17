@@ -61,7 +61,8 @@ del C
 manifest = {
     'description': 'for various poses: joint state of the panda and ids and centers of arUco markers in pixel coordinates',
     'n_datasets': NUMBER_OF_POSES,
-    'marker_ids': list(markers)
+    'marker_ids': list(markers),
+    'keys': ['manifest', 'dataset_[i]/joint_state', 'dataset_[i]/centers', 'dataset_[i]/ids']
 }
 h5.write('manifest', bytearray(json.dumps(manifest), 'utf-8'), dtype='int8')
 

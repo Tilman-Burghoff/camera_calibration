@@ -53,5 +53,6 @@ manifest = {
     'description': 'ground truth positions of aruco markers in world frame',
     'n_datasets': len(MARKER_IDS),
     'marker_ids': MARKER_IDS,
+    'keys': ['manifest', 'marker_[id]/position']
 }
 h5.write('manifest', bytearray(json.dumps(manifest), 'utf-8'), dtype='int8')
