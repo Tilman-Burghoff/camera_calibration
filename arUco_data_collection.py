@@ -29,11 +29,16 @@ while i < NUMBER_OF_POSES:
     bot.hold(floating=True, damping=False)
     while bot.getKeyPressed() != ord('q'):
         rgb, _, points = bot.getImageDepthPcl("l_cameraWrist")
+        corners, ids, _ = aruco.detectMarkers(rgb, aruco_6x6)
         points = points.reshape(-1,3)
         rgb = rgb.reshape(-1,3)
         mask = (np.linalg.norm(points, axis=-1) > MIN_DISTANCE) & (np.linalg.norm(points, axis=-1) < MAX_DISTANCE)
         pcl.setPointCloud(points[mask], rgb[mask])
-        bot.sync(C, viewMsg="move to a new pose and press 'q' to capture")
+        if ids is not None:
+            viewmsg = f"visible markers: {ids.squeeze().tolist()}\nmove to a new pose and press 'q' to capture"
+        else:
+            viewmsg = f"no markers visible\nmove to a new pose and press 'q' to capture"
+        bot.sync(C, viewMsg=viewmsg)
     
     bot.hold(floating=False)
     bot.sync(C)
@@ -45,15 +50,16 @@ while i < NUMBER_OF_POSES:
         print("No markers detected, please try again")
         continue
 
-    markers.update(ids.toset())
+    print(set((ids.squeeze().tolist())))
+
+    markers.update(set((ids.squeeze().tolist())))
     
     centers = [np.mean(np.array(corners[i].squeeze()), axis=0) for i in range(len(corners))]
     key = f'dataset_{i}'
     h5.write(key+'/joint_state', joint_state, dtype='float64')
     h5.write(key+'/centers', centers, dtype='float32')
-    h5.write(key+'/ids', ids, dtype='int32')
+    h5.write(key+'/ids', ids.squeeze(), dtype='int32')
     i += 1
-
 
 del bot
 del C
