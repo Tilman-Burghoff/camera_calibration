@@ -11,7 +11,7 @@ aruco_params = aruco.DetectorParameters_create()
 aruco_params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
 
 
-NUMBER_OF_POSES = 2
+NUMBER_OF_POSES = 20
 MIN_DISTANCE = 0.2
 MAX_DISTANCE = 0.8
 
@@ -49,20 +49,22 @@ while i < NUMBER_OF_POSES:
     if ids is None:
         print("No markers detected, please try again")
         continue
-
-    print(set((ids.squeeze().tolist())))
-
-    markers.update(set((ids.squeeze().tolist())))
+    
+    marker_set = set(ids.squeeze().tolist()) if ids.shape[0] > 1 else {int(ids)} # maybe alt set(ids.flatten().tolist())
+    print(marker_set)
+    markers.update(marker_set)
     
     centers = [np.mean(np.array(corners[i].squeeze()), axis=0) for i in range(len(corners))]
     key = f'dataset_{i}'
     h5.write(key+'/joint_state', joint_state, dtype='float64')
     h5.write(key+'/centers', centers, dtype='float32')
-    h5.write(key+'/ids', ids.squeeze(), dtype='int32')
+    h5.write(key+'/ids', ids.flatten(), dtype='int32')
     i += 1
 
 del bot
 del C
+
+print(f"Recorded {i} poses with markers: {markers}")
 
 manifest = {
     'description': 'for various poses: joint state of the panda and ids and centers of arUco markers in pixel coordinates',
@@ -71,14 +73,3 @@ manifest = {
     'keys': ['manifest', 'dataset_[i]/joint_state', 'dataset_[i]/centers', 'dataset_[i]/ids']
 }
 h5.write('manifest', bytearray(json.dumps(manifest), 'utf-8'), dtype='int8')
-
-h5 = H5Reader('aruco_calibration_data.h5')
-for i in range(NUMBER_OF_POSES):
-    key = f'dataset_{i}'
-    joint_state = h5.read(key+'/joint_state')
-    centers = h5.read(key+'/centers')
-    ids = h5.read(key+'/ids')
-    print(f"Dataset {i}:")
-    print(" Joint state:", joint_state)
-    print(" Marker ids:", ids.flatten())
-    print(" Marker centers (px):", np.round(centers,1))
