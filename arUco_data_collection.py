@@ -23,14 +23,7 @@ bot.getImageAndDepth('l_cameraWrist') # initialize camera
 
 h5 = H5Writer('aruco_calibration_data.h5')
 
-manifest = {
-    'description': 'for various poses: joint state of the panda and ids and centers of arUco markers in pixel coordinates',
-    'n_datasets': NUMBER_OF_POSES
-}
-h5.write('manifest', bytearray(json.dumps(manifest), 'utf-8'), dtype='int8')
-
-
-data = []
+markers = set()
 i = 0
 while i < NUMBER_OF_POSES:
     bot.hold(floating=True, damping=False)
@@ -44,14 +37,16 @@ while i < NUMBER_OF_POSES:
     
     bot.hold(floating=False)
     bot.sync(C)
+    joint_state = C.getJointState()
     rgb, _, points = bot.getImageDepthPcl("l_cameraWrist")
     corners, ids, _ = aruco.detectMarkers(rgb, aruco_6x6, parameters=aruco_params)
 
     if ids is None:
         print("No markers detected, please try again")
         continue
+
+    markers.update(ids.toset())
     
-    joint_state = C.getJointState()
     centers = [np.mean(np.array(corners[i].squeeze()), axis=0) for i in range(len(corners))]
     key = f'dataset_{i}'
     h5.write(key+'/joint_state', joint_state, dtype='float64')
@@ -62,6 +57,13 @@ while i < NUMBER_OF_POSES:
 
 del bot
 del C
+
+manifest = {
+    'description': 'for various poses: joint state of the panda and ids and centers of arUco markers in pixel coordinates',
+    'n_datasets': NUMBER_OF_POSES,
+    'marker_ids': list(markers)
+}
+h5.write('manifest', bytearray(json.dumps(manifest), 'utf-8'), dtype='int8')
 
 h5 = H5Reader('aruco_calibration_data.h5')
 for i in range(NUMBER_OF_POSES):
