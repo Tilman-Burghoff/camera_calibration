@@ -3,7 +3,7 @@ import numpy as np
 from robotic.src import h5_helper
 import json
 
-MARKER_IDS = [4, 6, 14] # ids of the markers to record
+MARKER_IDS =  [0, 1, 4, 6, 11, 12, 14] # ids of the markers to record
 ROUNDS = 3
 
 ry.params_add({
@@ -19,28 +19,30 @@ bot.sync(C)
 
 template = C.getFrame('template')
 
-while bot.getKeyPressed() != ord('q'):
-    bot.sync(C, viewMsg=f'Move template to table origin, then press q')
-bot.sync(C)
-
-origin = template.getPosition()
-C.addFrame('origin').setPosition(origin).setShape(ry.ST.marker, [.05])
+panda_base_frame = C.addFrame('l_panda_base').setShape(ry.ST.marker, [.05])
+origin_frame = C.addFrame('origin')
 C.addFrame('table', 'origin').setRelativePosition([0,0,-.05]).setShape(ry.ST.box, [2.3, 1.24, .11]).setColor([100,100,100,100])
-template_marker = C.addFrame('template_marker', 'origin').setShape(ry.ST.marker, [.5])
+template_marker = C.addFrame('template_marker', 'l_panda_base').setShape(ry.ST.marker, [.5])
+
+
+
+def opti_to_world(z):
+    z = z - panda_base
+    return np.array([-z[1], z[0], z[2]])
 
 results = []
 
-def opti_to_world(z):
-    z = z - origin
-    z[2] += .6
-    return np.array([-z[1], z[0], z[2]])
-
 for round in range(ROUNDS):
+    panda_base = C.getFrame('panda_base_opti').getPosition()
+    panda_base_frame.setPosition(panda_base)
+    origin_frame.setPosition(panda_base - np.array([-0.40070843, -0.25559472,  0]))
+
     results.append({})
+
     for id in MARKER_IDS:
         bot.sync(C)
         while bot.getKeyPressed() != ord('q'):
-            z = opti_to_world(template.getPosition()) + np.array([0,0,-.6])
+            z = opti_to_world(template.getPosition())
             template_marker.setRelativePosition(z)
             bot.sync(C, viewMsg=f'Move template to marker {id}')
         coords = opti_to_world(C.getFrame('template').getPosition())
@@ -54,7 +56,7 @@ for id in MARKER_IDS:
     h5.write(f'marker_{id}/position', pos, dtype='float32')
 
 manifest = {
-    'description': 'ground truth positions of aruco markers in world frame',
+    'description': 'ground truth positions of the centers of the aruco markers in l_panda_base frame',
     'n_datasets': len(MARKER_IDS),
     'marker_ids': MARKER_IDS,
     'keys': ['manifest', 'marker_[id]/position']

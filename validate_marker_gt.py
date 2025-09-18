@@ -6,23 +6,24 @@ import robotic as ry
 from robotic.src import h5_helper
 
 C = ry.Config()
-C.addFile(ry.raiPath("scenarios/pandaSingle_camera.g"))
+C.addFile(ry.raiPath('scenarios/pandaSingle_camera.g'))
 bot = ry.BotOp(C, True)
 
-h5 = h5_helper.H5Reader('marker_gt.h5')
+h5 = h5_helper.H5Reader('marker_gt_fixed.h5')
 manifest = h5.read_dict('manifest')
 print(manifest)
 h5.print_info()
 
 for id in manifest['marker_ids']:
-    key = f'marker_{id}'
+    key = f'marker_{id}/position'
     print(f'key: {key}')
     pos = h5.read(key)
-    marker = C.addFrame(f'marker_{id}')
+    marker = C.addFrame(f'marker_{id}', 'l_panda_base')
     marker.setShape(ry.ST.marker, [.05]).setColor([1,0,0,.5])
-    marker.setPosition(pos)
+    marker.setRelativePosition(pos)
     print(f'marker {id} position: {pos}')
 
+C.addFrame('baseframemarker', 'l_panda_base').setShape(ry.ST.marker, [1])
 C.view(True)
 
 def ik_marker(C, marker_name):
@@ -39,16 +40,14 @@ def ik_marker(C, marker_name):
     komo.addObjective([], ry.FS.scalarProductYZ, ['l_gripper', 'world'], ry.OT.eq)
     ret = ry.NLP_Solver(komo.nlp(), verbose=-1).solve()
     print(ret)
-    komo.view(True)
     return komo.getPath()[-1]
 
-C.addFrame('marker_0').setPosition([0,0,.6])
 
-for id in [0] + manifest['marker_ids']:
-    name = f'marker_{id}'
-    goal = ik_marker(C, name)
-    bot.moveTo(goal)
-    bot.wait(C)
+for id in manifest['marker_ids']:
+    for _ in range(3):
+        name = f'marker_{id}'
+        goal = ik_marker(C, name)
+        bot.moveTo(goal)
+        bot.wait(C)
     C.view(True)
-    #bot.home(C)
-    #bot.wait(C)
+bot.home(C)
