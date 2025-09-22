@@ -9,7 +9,7 @@ C = ry.Config()
 C.addFile(ry.raiPath('scenarios/pandaSingle_camera.g'))
 bot = ry.BotOp(C, True)
 
-h5 = h5_helper.H5Reader('marker_gt_fixed.h5')
+h5 = h5_helper.H5Reader('marker_gt_new.h5')
 manifest = h5.read_dict('manifest')
 print(manifest)
 h5.print_info()
@@ -20,7 +20,7 @@ for id in manifest['marker_ids']:
     pos = h5.read(key)
     marker = C.addFrame(f'marker_{id}', 'l_panda_base')
     marker.setShape(ry.ST.marker, [.05]).setColor([1,0,0,.5])
-    marker.setRelativePosition(pos)
+    marker.setRelativePosition(pos.tolist() + [0])
     print(f'marker {id} position: {pos}')
 
 C.addFrame('baseframemarker', 'l_panda_base').setShape(ry.ST.marker, [1])

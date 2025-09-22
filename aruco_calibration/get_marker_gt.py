@@ -28,7 +28,7 @@ template_marker = C.addFrame('template_marker', 'l_panda_base').setShape(ry.ST.m
 
 def opti_to_world(z):
     z = z - panda_base
-    return np.array([-z[1], z[0], z[2]])
+    return np.array([-z[1], z[0], z[2]]) # pos[1], -pos[0]
 
 results = []
 
@@ -45,15 +45,18 @@ for round in range(ROUNDS):
             z = opti_to_world(template.getPosition())
             template_marker.setRelativePosition(z)
             bot.sync(C, viewMsg=f'Move template to marker {id}')
-        coords = opti_to_world(C.getFrame('template').getPosition())
-        results[round][id] = coords
-        print(f'marker {id} position: {np.round(coords, 3)}')
+        coords = np.zeros(3)
+        for _ in range(10):
+            bot.sync(C)
+            coords += opti_to_world(template.getPosition())
+        results[round][id] = coords / 10
+        print(f'marker {id} position: {np.round(coords / 10, 3)}')
 
 
-h5 = h5_helper.H5Writer('marker_gt.h5')
+h5 = h5_helper.H5Writer('marker_gt_new.h5')
 for id in MARKER_IDS:
     pos = np.mean([results[r][id] for r in range(ROUNDS)], axis=0)
-    h5.write(f'marker_{id}/position', pos, dtype='float32')
+    h5.write(f'marker_{id}/position', np.array([pos[1], -pos[0]]), dtype='float32')
 
 manifest = {
     'description': 'ground truth positions of the centers of the aruco markers in l_panda_base frame',

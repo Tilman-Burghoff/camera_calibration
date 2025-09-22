@@ -11,12 +11,12 @@ def look_at_marker_ik(C, marker_name, distance=0.2):
     komo.addControlObjective([], 0), 1e-1
     komo.addObjective([], ry.FS.accumulatedCollisions, [], ry.OT.eq)
     komo.addObjective([], ry.FS.jointLimits, [], ry.OT.ineq)
-    komo.addObjective([], ry.FS.positionDiff, ['l_cameraWrist_o', marker_name], ry.OT.eq, np.eye(3), [0,0,distance])
-    komo.addObjective([], ry.FS.scalarProductXZ, ['origin', 'l_cameraWrist_o'], ry.OT.eq)
-    komo.addObjective([], ry.FS.scalarProductYZ, ['origin', 'l_cameraWrist_o'], ry.OT.eq)
-    komo.addObjective([], ry.FS.scalarProductZZ, ['origin', 'l_cameraWrist_o'], ry.OT.ineq)
-    komo.addObjective([], ry.FS.scalarProductXY, ['l_cameraWrist_o', 'origin'], ry.OT.eq)
-    komo.addObjective([], ry.FS.scalarProductYY, ['origin', 'l_cameraWrist_o'], ry.OT.ineq)
+    komo.addObjective([], ry.FS.positionDiff, ['l_cameraWrist', marker_name], ry.OT.eq, np.eye(3), [0,0,distance])
+    komo.addObjective([], ry.FS.scalarProductXZ, ['origin', 'l_cameraWrist'], ry.OT.eq)
+    komo.addObjective([], ry.FS.scalarProductYZ, ['origin', 'l_cameraWrist'], ry.OT.eq)
+    komo.addObjective([], ry.FS.scalarProductZZ, ['origin', 'l_cameraWrist'], ry.OT.ineq)
+    komo.addObjective([], ry.FS.scalarProductXY, ['l_cameraWrist', 'origin'], ry.OT.eq)
+    komo.addObjective([], ry.FS.scalarProductYY, ['origin', 'l_cameraWrist'], ry.OT.ineq)
 
     ret = ry.NLP_Solver(komo.nlp(), verbose=-1).solve()
     print(ret)
@@ -39,17 +39,16 @@ def cam_to_base(C: ry.Config, cam_frame, coords):
 C = ry.Config()
 C.addFile(ry.raiPath('/scenarios/pandaSingle_camera.g'))
 C.addFrame('table_calibrated_camera', 'l_panda_joint7').setRelativePose([-0.0209509, 0.0471966, 0.17127, 0.386655, 0.0133645, -0.00307343, -0.922122])
-C.addFrame('aruco_calibrated_camera_old', 'l_panda_joint7').setRelativePose([-0.021096, 0.0529521, 0.174296, 0.386088, 0.00567668, -0.0017275, -0.922443])
-C.addFrame('aruco_calibrated_camera_new', 'l_panda_joint7').setRelativePose([-0.00499173, 0.066226, -0.0274848, 0.385713, 0.0288768, 0.0163762, -0.922021])
+C.addFrame('aruco_calibrated_camera', 'l_panda_joint7').setRelativePose([-0.0208365, 0.0533162, 0.17019, 0.385929, 0.00892461, -0.00428418, -0.922475])
 
 root = Path(__file__).parent.parent
-h5 = H5Reader(root / 'data/marker_gt_fixed.h5')
+h5 = H5Reader(root / 'data/marker_gt_new.h5')
 manifest = h5.read_dict('manifest')
 
 gt_pos = []
 for id in manifest['marker_ids']:
     position = h5.read(f'marker_{id}/position')
-    C.addFrame(f'marker_{id}', 'l_panda_base').setRelativePosition(position)
+    C.addFrame(f'marker_{id}', 'l_panda_base').setRelativePosition(position.tolist() + [0])
     gt_pos.append(position)
 gt_pos = np.array(gt_pos)
 
@@ -76,9 +75,9 @@ for i in range(3):
         corners = corners[idx].squeeze().astype("int")
         corner_points = pcl[corners[:,1],corners[:,0]]
         cam_position = np.average(corner_points, axis=0)
-        for j, cam in enumerate(['table_calibrated_camera', 'aruco_calibrated_camera_old', 'aruco_calibrated_camera_new']):
+        for j, cam in enumerate(['table_calibrated_camera', 'aruco_calibrated_camera', 'l_cameraWrist_o']):
             base_coords = cam_to_base(C, cam, cam_position)
             results[j].setdefault(id, []).append(base_coords[:3])
 
-with open(root / 'data/comparison_results_axis_aligned.pkl', 'xb') as f:      
+with open(root / 'data/comparison_results_v2.pkl', 'xb') as f:      
     pickle.dump(results, f)
