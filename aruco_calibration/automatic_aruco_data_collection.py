@@ -3,16 +3,20 @@ import numpy as np
 import json
 from robotic.src import h5_helper
 from cv2 import aruco
+from pathlib import Path
+import matplotlib.pyplot as plt
 
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_100)
+aruco_params = aruco.DetectorParameters_create()
+aruco_params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
+root = Path(__file__).parent.parent
 
-
-NUMBER_OF_POSES = 20
+NUMBER_OF_POSES = 100
 IMAGES_PER_POSE = 10
 MIN_ANGLE = 0
-MAX_ANGLE = 1/3 * 1/2 * np.pi
+MAX_ANGLE = 1/4 * np.pi
 MIN_DISTANCE = .2
-MAX_DISTANCE = .5
+MAX_DISTANCE = .7
 MAX_TARGET_OFFSET = 0.1
 SEED = 0
 
@@ -35,11 +39,31 @@ def look_with_angle(C, target_name, distance, angle):
     return komo
 
 
+def bilinear_depth_interpolation(depth, x, y):
+    x0 = int(np.floor(x))
+    x1 = min(x0 + 1, depth.shape[1] - 1)
+    y0 = int(np.floor(y))
+    y1 = min(y0 + 1, depth.shape[0] - 1)
+
+    Q11 = depth[y0, x0]
+    Q21 = depth[y0, x1]
+    Q12 = depth[y1, x0]
+    Q22 = depth[y1, x1]
+
+    if np.isnan(Q11) or np.isnan(Q21) or np.isnan(Q12) or np.isnan(Q22):
+        return np.nan
+
+    return (Q11 * (x1 - x) * (y1 - y) +
+            Q21 * (x - x0) * (y1 - y) +
+            Q12 * (x1 - x) * (y - y0) +
+            Q22 * (x - x0) * (y - y0))
+
+
 def main():
     C = ry.Config()
     C.addFile(ry.raiPath("scenarios/pandaSingle_camera.g"))
 
-    h5 = h5_helper.H5Reader('marker_gt_fixed.h5')
+    h5 = h5_helper.H5Reader(root / 'data' / 'marker_gt_new.h5')
     manifest = h5.read_dict('manifest')
 
     for id in manifest['marker_ids']:
@@ -50,9 +74,9 @@ def main():
         marker.setRelativePosition(pos.tolist() + [0])
         print(f'marker {id} position: {pos}')
 
-    h5 = h5_helper.H5Writer('aruco_data_collection.h5')
+    h5 = h5_helper.H5Writer(root / 'data' /'aruco_calibration_data_v2.h5')
 
-    bot = ry.BotOp(C, False)
+    bot = ry.BotOp(C, True)
     bot.getImageAndDepth('l_cameraWrist') # initialize camera
 
     target = C.addFrame('target')
@@ -75,7 +99,6 @@ def main():
         ret = ry.NLP_Solver(komo.nlp(), verbose=-1).solve()
         if not ret.feasible:
             continue
-
         path = komo.getPath()
 
         bot.moveTo(path[-1])
@@ -85,18 +108,20 @@ def main():
         coords = dict()
         count = dict()
         joint_states = []
-        for i in range(IMAGES_PER_POSE):
+        for _ in range(IMAGES_PER_POSE):
             joint_states.append(C.getJointState())
             rgb, depth = bot.getImageAndDepth("l_cameraWrist")
-            ids, corners, _ = aruco.detectMarkers(rgb, aruco_dict)
+            corners, ids, _ = aruco.detectMarkers(rgb, aruco_dict)
             if ids is None:
                 continue
             for id, corner in zip(ids.flatten(), corners):
+                pixel_coord = corner[0, 0, :].astype(int)
+                d = bilinear_depth_interpolation(depth, pixel_coord[0], pixel_coord[1])
                 if id not in coords:
-                    coords[id] = np.concatenate([corner[0].flatten(), depth[corner[0]]])
+                    coords[id] = np.concatenate([corner[0, 0, :], [d]])
                     count[id] = 1
                 else:
-                    coords[id] += np.concatenate([corner[0].flatten(), depth[corner[0]]])
+                    coords[id] += np.concatenate([corner[0, 0, :], [d]])
                     count[id] += 1
             
         if len(coords) == 0:
@@ -105,11 +130,14 @@ def main():
         corners = []
         ids = []
         for id in coords:
+            if count[id] < 3:
+                continue
             coords[id] /= count[id]
             corners.append(coords[id])
             ids.append(id)
             marker_set.add(id)
 
+        print(f'dataset {i}, {ids=}')
         h5.write(f'dataset_{i}/joint_state', np.mean(joint_states, axis=0), dtype='float64')
         h5.write(f'dataset_{i}/marker_positions', np.array(corners), dtype='float32')
         h5.write(f'dataset_{i}/marker_ids', np.array(ids), dtype='int32')
