@@ -4,20 +4,27 @@ import pickle
 from pathlib import Path
 from robotic.src.h5_helper import H5Reader
 
-cam_names = ['Table Calibrated Camera', 'Aruco Calibrated Camera', 'Old Calibration']
+cam_names = ['Table Calibrated Camera', 'Aruco Calibrated Camera (20 Poses)', 'Aruco Calibrated Camera (100 Poses)', 'Old Calibration']
 
 root = Path(__file__).parent.parent
 print(root, Path(__file__))
 
-with open(root / 'data/comparison_results_v2.pkl', 'rb') as f:
+with open(root / 'data/comparison_results_v3.pkl', 'rb') as f:
     results = pickle.load(f)
 
-h5 = H5Reader(root / 'data/marker_gt_fixed.h5')
-manifest = h5.read_dict('manifest')
 gt_pos = dict()
-for id in manifest['marker_ids']:
-    position = h5.read(f'marker_{id}/position')
-    gt_pos[id] = np.array(position)
+gt_opti_output = """optimal aruco_0 position: [0.0616964, 0.466489, -0.00147755]
+optimal aruco_1 position: [0.0457536, -0.363669, -0.00128368]
+optimal aruco_4 position: [0.558125, -0.128908, 0.00324898]
+optimal aruco_6 position: [0.610304, 0.124817, 0.00249124]
+optimal aruco_11 position: [0.355938, -0.307029, 0.000788678]
+optimal aruco_12 position: [0.395202, 0.340062, -0.000933702]
+optimal aruco_14 position: [0.38215, -0.0447043, 0.000646111]"""
+for line in gt_opti_output.split('\n'):
+    desc, pos_str = line.split(' position: ')
+    id = int(desc.split('_')[1])
+    pos = eval(pos_str)
+    gt_pos[id] = np.array(pos)
 
 # lets plot the results - combined
 f, ax = plt.subplots(1,1, figsize=(10,10))
@@ -30,8 +37,8 @@ ax.axis('equal')
 for r in [0.01, 0.02]:
     circle = plt.Circle((0, 0), r, color='gray', fill=False, linestyle='--')
     ax.add_artist(circle)
-ax.set_xlim(-0.025, 0.025)
-ax.set_ylim(-0.025, 0.025)
+ax.set_xlim(-0.02, 0.02)
+ax.set_ylim(-0.02, 0.02)
 ax.grid(True)
 
 
@@ -47,7 +54,7 @@ ax.legend()
 plt.show()
 
 # lets plot the results
-f, axs = plt.subplots(1,2, figsize=(10,10))
+f, axs = plt.subplots(1,2, figsize=(20,10))
 # add circles for 1,2,3,4 cm error
 for r in [0.01, 0.02]:
     circle1 = plt.Circle((0, 0), r, color='gray', fill=False, linestyle='--')
