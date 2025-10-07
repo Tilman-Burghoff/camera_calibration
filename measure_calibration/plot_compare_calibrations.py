@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import pickle
 from pathlib import Path
 from robotic.src.h5_helper import H5Reader
+from parse_arucos import parse_arucos
+import robotic as ry
 
 cam_names = ['Table Calibrated Camera', 'Aruco Calibrated Camera (20 Poses)', 'Aruco Calibrated Camera (100 Poses)', 'Old Calibration']
 
@@ -13,18 +15,19 @@ with open(root / 'data/comparison_results_v3.pkl', 'rb') as f:
     results = pickle.load(f)
 
 gt_pos = dict()
-gt_opti_output = """optimal aruco_0 position: [0.0616964, 0.466489, -0.00147755]
-optimal aruco_1 position: [0.0457536, -0.363669, -0.00128368]
-optimal aruco_4 position: [0.558125, -0.128908, 0.00324898]
-optimal aruco_6 position: [0.610304, 0.124817, 0.00249124]
-optimal aruco_11 position: [0.355938, -0.307029, 0.000788678]
-optimal aruco_12 position: [0.395202, 0.340062, -0.000933702]
-optimal aruco_14 position: [0.38215, -0.0447043, 0.000646111]"""
-for line in gt_opti_output.split('\n'):
-    desc, pos_str = line.split(' position: ')
-    id = int(desc.split('_')[1])
-    pos = eval(pos_str)
-    gt_pos[id] = np.array(pos)
+C = ry.Config()
+C.addFile(ry.raiPath('/scenarios/pandaSingle.g'))
+gt_opti_output = """aruco_0(table): { Q: [-0.462927, -0.139256, 0.05076], shape: marker, size: [.05] }
+aruco_1(table): { Q: [0.359713, -0.153013, 0.0508287], shape: marker, size: [.05] }
+aruco_4(table): { Q: [0.126525, 0.353908, 0.0516191], shape: marker, size: [.05] }
+aruco_6(table): { Q: [-0.124805, 0.405355, 0.0499016], shape: marker, size: [.05] }
+aruco_11(table): { Q: [0.302758, 0.15373, 0.0514353], shape: marker, size: [.05] }
+aruco_12(table): { Q: [-0.33829, 0.191526, 0.0497731], shape: marker, size: [.05] }
+aruco_14(table): { Q: [0.0428602, 0.179035, 0.0510892], shape: marker, size: [.05] }"""
+for id, (parent, position) in parse_arucos(gt_opti_output).items():
+    marker = C.addFrame(f'marker_{id}', parent).setRelativePosition(position)
+    rel_marker = C.addFrame(f'marker_rel_{id}', 'l_panda_base').setPosition(marker.getPosition())
+    gt_pos[id] = np.array(rel_marker.getRelativePosition())
 
 # lets plot the results - combined
 f, ax = plt.subplots(1,1, figsize=(10,10))
